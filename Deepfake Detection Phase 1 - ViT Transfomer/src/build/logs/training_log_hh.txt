@@ -1,0 +1,63 @@
+Using device: cudaTraining started at <bound method Event.record of <torch.cuda.Event uninitialized>>
+============================================================
+
+Epoch 1/20
+  Train | Loss: 0.6980 | Acc: 50.45% | Prec: 0.5123 | Rec: 0.5045 | F1: 0.4995
+  Val   | Loss: 0.6989 | Acc: 38.03% | Prec: 0.6968 | Rec: 0.3803 | F1: 0.4412
+Epoch 2/20
+  Train | Loss: 0.7014 | Acc: 49.55% | Prec: 0.4776 | Rec: 0.4955 | F1: 0.4693
+  Val   | Loss: 0.6521 | Acc: 83.80% | Prec: 0.7023 | Rec: 0.8380 | F1: 0.7642
+Epoch 3/20
+  Train | Loss: 0.6982 | Acc: 45.00% | Prec: 0.4532 | Rec: 0.4500 | F1: 0.4457
+  Val   | Loss: 0.6718 | Acc: 83.10% | Prec: 0.7594 | Rec: 0.8310 | F1: 0.7725
+Epoch 4/20
+  Train | Loss: 0.6836 | Acc: 55.91% | Prec: 0.6623 | Rec: 0.5591 | F1: 0.4799
+  Val   | Loss: 0.7003 | Acc: 47.18% | Prec: 0.7049 | Rec: 0.4718 | F1: 0.5396
+Epoch 5/20
+  Train | Loss: 0.6682 | Acc: 60.00% | Prec: 0.5909 | Rec: 0.6000 | F1: 0.5881
+  Val   | Loss: 0.6184 | Acc: 66.90% | Prec: 0.7135 | Rec: 0.6690 | F1: 0.6896
+Epoch 6/20
+  Train | Loss: 0.6369 | Acc: 64.09% | Prec: 0.6431 | Rec: 0.6409 | F1: 0.6414
+  Val   | Loss: 0.6316 | Acc: 61.27% | Prec: 0.7230 | Rec: 0.6127 | F1: 0.6565
+Epoch 7/20
+  Train | Loss: 0.6589 | Acc: 62.73% | Prec: 0.6258 | Rec: 0.6273 | F1: 0.6263
+  Val   | Loss: 0.6833 | Acc: 51.41% | Prec: 0.7192 | Rec: 0.5141 | F1: 0.5779
+Epoch 8/20
+  Train | Loss: 0.6560 | Acc: 60.91% | Prec: 0.6109 | Rec: 0.6091 | F1: 0.5997
+  Val   | Loss: 0.6256 | Acc: 61.27% | Prec: 0.7313 | Rec: 0.6127 | F1: 0.6581
+Epoch 9/20
+  Train | Loss: 0.6330 | Acc: 64.55% | Prec: 0.6509 | Rec: 0.6455 | F1: 0.6448
+  Val   | Loss: 0.7209 | Acc: 50.70% | Prec: 0.7169 | Rec: 0.5070 | F1: 0.5716
+Epoch 10/20
+  Train | Loss: 0.6266 | Acc: 65.00% | Prec: 0.6509 | Rec: 0.6500 | F1: 0.6488
+  Val   | Loss: 0.6519 | Acc: 59.15% | Prec: 0.7337 | Rec: 0.5915 | F1: 0.6427
+Epoch 11/20
+  Train | Loss: 0.5389 | Acc: 75.91% | Prec: 0.7640 | Rec: 0.7591 | F1: 0.7580
+  Val   | Loss: 0.7175 | Acc: 52.11% | Prec: 0.7127 | Rec: 0.5211 | F1: 0.5841
+Epoch 12/20
+  Train | Loss: 0.5485 | Acc: 74.09% | Prec: 0.7425 | Rec: 0.7409 | F1: 0.7405
+  Val   | Loss: 0.7491 | Acc: 50.00% | Prec: 0.7057 | Rec: 0.5000 | F1: 0.5657
+Epoch 13/20
+  Train | Loss: 0.5936 | Acc: 69.09% | Prec: 0.6924 | Rec: 0.6909 | F1: 0.6869
+  Val   | Loss: 0.5699 | Acc: 68.31% | Prec: 0.7430 | Rec: 0.6831 | F1: 0.7089
+Epoch 14/20
+  Train | Loss: 0.4741 | Acc: 80.00% | Prec: 0.8005 | Rec: 0.8000 | F1: 0.7992
+  Val   | Loss: 0.6129 | Acc: 62.68% | Prec: 0.7353 | Rec: 0.6268 | F1: 0.6690
+Epoch 15/20
+  Train | Loss: 0.4982 | Acc: 79.09% | Prec: 0.7905 | Rec: 0.7909 | F1: 0.7906
+  Val   | Loss: 0.6812 | Acc: 59.15% | Prec: 0.7337 | Rec: 0.5915 | F1: 0.6427
+Epoch 16/20
+  Train | Loss: 0.4674 | Acc: 79.55% | Prec: 0.7965 | Rec: 0.7955 | F1: 0.7956
+  Val   | Loss: 0.6693 | Acc: 60.56% | Prec: 0.7210 | Rec: 0.6056 | F1: 0.6511
+Epoch 17/20
+  Train | Loss: 0.4175 | Acc: 83.64% | Prec: 0.8364 | Rec: 0.8364 | F1: 0.8364
+  Val   | Loss: 0.6336 | Acc: 65.49% | Prec: 0.7349 | Rec: 0.6549 | F1: 0.6882
+Epoch 18/20
+  Train | Loss: 0.4512 | Acc: 82.73% | Prec: 0.8279 | Rec: 0.8273 | F1: 0.8270
+  Val   | Loss: 0.6741 | Acc: 60.56% | Prec: 0.7293 | Rec: 0.6056 | F1: 0.6527
+Epoch 19/20
+  Train | Loss: 0.3866 | Acc: 82.27% | Prec: 0.8231 | Rec: 0.8227 | F1: 0.8227
+  Val   | Loss: 0.6707 | Acc: 60.56% | Prec: 0.7293 | Rec: 0.6056 | F1: 0.6527
+Epoch 20/20
+  Train | Loss: 0.3855 | Acc: 83.64% | Prec: 0.8364 | Rec: 0.8364 | F1: 0.8364
+  Val   | Loss: 0.6689 | Acc: 61.97% | Prec: 0.7333 | Rec: 0.6197 | F1: 0.6636

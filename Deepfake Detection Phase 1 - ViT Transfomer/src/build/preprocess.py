@@ -9,7 +9,7 @@ import argparse
 def frame_dwt(frame, wavelet='haar'):
     coeffs2 = pywt.dwt2(frame, wavelet)
     cA, (cH, cV, cD) = coeffs2
-    return cA, cH, cV
+    return cH, cV, cD
 
 def process_video(video_path, num_frames=8, wavelet='haar'):
     """Reads video, extracts DWT, resizes, and returns a tensor."""
@@ -37,10 +37,10 @@ def process_video(video_path, num_frames=8, wavelet='haar'):
         
         if current_frame in target_indices:
             gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            cA, cH, cV = frame_dwt(gray_frame, wavelet)
+            cH, cV, cD = frame_dwt(gray_frame, wavelet)
             
             # Stack components (3 channels)
-            combined = np.stack([cA, cH, cV], axis=0).astype(np.float32)
+            combined = np.stack([cH, cV, cD], axis=0).astype(np.float32)
             tensor_frame = torch.from_numpy(combined)
             
             # Resize for the vit transformer
@@ -81,27 +81,37 @@ def main():
     
     for category in categories:
         input_dir = os.path.join(args.data_path, category)
-        output_dir = os.path.join(args.output_path, category)
-        os.makedirs(output_dir, exist_ok=True)
-        
         videos = [f for f in os.listdir(input_dir) if f.endswith('.mp4')]
         
-        print(f"Processing {category}...")
-        for video_file in tqdm(videos):
-            video_path = os.path.join(input_dir, video_file)
-            save_path = os.path.join(output_dir, video_file.replace('.mp4', '.pt'))
-            
+        # Shuffle and split into train/val/test
+        videos = sorted(videos)
+        np.random.seed(42) # Seed for reproducibility
+        np.random.shuffle(videos)
+
+        total_videos = len(videos)
+        train_split = int(0.7 * total_videos)
+        val_split = int(0.15 * total_videos)
+
+        train_videos = videos[:train_split]
+        val_videos = videos[train_split:train_split+val_split]
+        test_videos = videos[train_split+val_split:]
+
         
-            if os.path.exists(save_path):
-                continue
-                
-            try:
-                tensor = process_video(video_path)
-                if tensor is not None:
-                    # Saving with float16
-                    torch.save(tensor.half(), save_path)
-            except Exception as e:
-                print(f"Error {video_file}: {e}")
+       # Process and save to respective folders
+        for split_name, split_videos in [('train', train_videos), ('val', val_videos), ('test', test_videos)]:
+            output_dir = os.path.join(args.output_path, split_name, category)
+            os.makedirs(output_dir, exist_ok=True)
+            
+            for video_file in split_videos:
+                video_path = os.path.join(input_dir, video_file)
+                save_path = os.path.join(output_dir, video_file.replace('.mp4', '.pt'))
+
+                try:
+                    tensor = process_video(video_path)
+                    if tensor is not None:
+                        torch.save(tensor, save_path)
+                except Exception as e:
+                    print(f"Error processing {video_path}: {e}")
 
 if __name__ == "__main__":
     main()
