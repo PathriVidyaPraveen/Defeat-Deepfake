@@ -53,86 +53,81 @@ class TemporalViT(nn.Module):
         weights = ViT_B_16_Weights.IMAGENET1K_V1
         self.vit = vit_b_16(weights=weights)
 
-        # FIX 1: Unfreeze last 2 blocks of ViT for fine-tuning
+        # --- FREEZING STRATEGY ---
         for param in self.vit.parameters():
             param.requires_grad = False
         
-        # Unfreeze encoder blocks 10 and 11 (last 2 blocks)
+        # Unfreeze last 2 blocks
         for i in [10, 11]:
             for param in self.vit.encoder.layers[i].parameters():
                 param.requires_grad = True
-        
-        # Unfreeze layer norm
         for param in self.vit.encoder.ln.parameters():
             param.requires_grad = True
         
         self.vit.heads = nn.Sequential(nn.Identity())
+        
+        # Dimensions
         self.rgb_embed_dim = 768
-
-        # Trainable Wavelet CNN 
         self.wavelet_embed_dim = 128
         self.wavelet_cnn = WaveletModel(output_dim=self.wavelet_embed_dim)
-
-        # Fusion
-        self.num_frames = num_frames
-
-        # LSTM input
-        total_input_dim = self.rgb_embed_dim + self.wavelet_embed_dim
         
-        # LSTM Parameters
-        self.temporal_encoder = nn.LSTM(
-            input_size=total_input_dim,
-            hidden_size=256,
-            num_layers=2,
-            batch_first=True,
-            dropout=0.2,  # Reduced from 0.5
-            bidirectional=True
+        total_input_dim = self.rgb_embed_dim + self.wavelet_embed_dim # 896
+
+        # --- NEW: TEMPORAL CNN INSTEAD OF LSTM ---
+        # Input: (Batch, 896, 8) -> Output: (Batch, 256, 8)
+        self.temporal_cnn = nn.Sequential(
+            nn.Conv1d(in_channels=total_input_dim, out_channels=256, kernel_size=3, padding=1),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            # Second layer for deeper temporal abstraction
+            nn.Conv1d(in_channels=256, out_channels=128, kernel_size=3, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU()
         )
         
-        # Adding dropout to entire model
-        self.dropout = nn.Dropout(p=0.3)  # Reduced from 0.5
-        
-        # Bidirectional LSTM
+        # Global Average Pooling over time (Squash 8 frames into 1 vector)
+        self.global_pool = nn.AdaptiveAvgPool1d(1)
+
         self.classifier = nn.Sequential(
-            nn.Linear(256 * 2, 128),
+            nn.Flatten(),
+            nn.Linear(128, 64),
             nn.ReLU(),
-            nn.Dropout(0.4),  
-            nn.Linear(128, num_classes)
+            nn.Dropout(0.3),
+            nn.Linear(64, num_classes)
         )
     
     def forward(self, x):
         b, t, c, h, w = x.shape
         
-        # Fold time
+        # 1. Fold time for frame-wise feature extraction
         x = x.view(b * t, c, h, w)
 
-        # Split channels - VERIFY THIS IS CORRECT
+        # 2. Split Streams (Ensure dataloader provides 6 channels!)
         x_rgb = x[:, :3, :, :]
-        x_wav = x[:, 3:, :, :]  # Must be channels 3-5, NOT 0-2!
+        x_wav = x[:, 3:, :, :] 
 
-        # RGB stream - now partially trainable
-        rgb_features = self.vit(x_rgb)
+        # 3. Extract Features
+        rgb_features = self.vit(x_rgb)       # (B*T, 768)
+        wav_features = self.wavelet_cnn(x_wav) # (B*T, 128)
         
-        # Wavelet stream for CNN 
-        wav_features = self.wavelet_cnn(x_wav)
+        # 4. Concatenate
+        fused_features = torch.cat((rgb_features, wav_features), dim=1) # (B*T, 896)
         
-        # Feature fusion
-        fused_features = torch.cat((rgb_features, wav_features), dim=1)
+        # 5. Unfold time
+        # Shape becomes (Batch, Time, Features)
+        temporal_input = fused_features.view(b, t, -1)
         
-        # Unfold time
-        lstm_input = fused_features.view(b, t, -1)
+        # 6. Permute for CNN
+        # Conv1d expects (Batch, Channels, Time) -> We have (Batch, Time, Features)
+        # So we swap dimensions 1 and 2
+        temporal_input = temporal_input.permute(0, 2, 1) # (B, 896, T)
         
-        # Temporal encoding with LSTM
-        lstm_out, (hidden, cell) = self.temporal_encoder(lstm_input)
+        # 7. Temporal Processing
+        t_out = self.temporal_cnn(temporal_input) # (B, 128, T)
         
-        # Use last hidden state
-        hidden = hidden.view(2, 2, b, 256)
-        last_hidden = hidden[-1]
-        last_hidden = last_hidden.permute(1, 0, 2).contiguous()
-        last_hidden = last_hidden.view(b, -1)
+        # 8. Pooling & Classify
+        t_out = self.global_pool(t_out) # (B, 128, 1)
+        out = self.classifier(t_out)
         
-        # Classification
-        features = self.dropout(last_hidden)
-        out = self.classifier(features)
-
         return out

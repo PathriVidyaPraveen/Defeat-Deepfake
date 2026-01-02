@@ -257,19 +257,22 @@ def main():
     model = TemporalViT(num_frames=8).to(device)
 
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
-    
-    # Optimizer
+
+    # --- OPTIMIZER  ---
     optimizer = optim.AdamW([
-        # Fine-tune last ViT blocks
+        # ViT Fine-tuning (Lower LR)
         {'params': model.vit.encoder.layers[10].parameters(), 'lr': 5e-6, 'weight_decay': 0.05},
         {'params': model.vit.encoder.layers[11].parameters(), 'lr': 5e-6, 'weight_decay': 0.05},
         {'params': model.vit.encoder.ln.parameters(), 'lr': 5e-6, 'weight_decay': 0.05},
-        # Train the Sidecar CNN
+        
+        # Wavelet Stream (Moderate LR)
         {'params': model.wavelet_cnn.parameters(), 'lr': 2e-4, 'weight_decay': 0.08}, 
-        # Train the LSTM
-        {'params': model.temporal_encoder.parameters(), 'lr': 8e-5, 'weight_decay': 0.08}, 
-        # Train the Classifier Head
-        {'params': model.classifier.parameters(), 'lr': 8e-5, 'weight_decay': 0.08}  
+        
+        # Temporal CNN (New Component - Higher LR usually safe for fresh layers)
+        {'params': model.temporal_cnn.parameters(), 'lr': 1e-3, 'weight_decay': 0.01}, 
+        
+        # Classifier
+        {'params': model.classifier.parameters(), 'lr': 1e-3, 'weight_decay': 0.01}  
     ])
     
     # Scheduler
