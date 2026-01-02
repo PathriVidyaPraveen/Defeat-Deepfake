@@ -27,22 +27,26 @@ class PreprocessedVideoDataset(Dataset):
         path, label = self.samples[idx]
         
         try:
-            # Load tensor (Shape: T, 3, 224, 224)
+            # Load tensor (Shape: T, 6, 224, 224)
+            # Channels 0-2: RGB (0-255 range usually, coming from cv2)
+            # Channels 3-5: Wavelets (Float, centered around 0)
             video_tensor = torch.load(path).float()
+            
         except Exception as e:
             print(f"Error loading {path}: {e}")
-            return torch.zeros(self.num_frames, 3, 224, 224), label
+            # FIX: Must return 6 channels to match valid data!
+            return torch.zeros(self.num_frames, 6, 224, 224), label
 
         # 1. Sanity Check
         if torch.isnan(video_tensor).any() or torch.isinf(video_tensor).any():
             video_tensor = torch.zeros_like(video_tensor)
 
-        # 2. Handle Padding (If video is too short)
-        # We ensure T=8 here strictly.
-        if video_tensor.shape[0] < self.num_frames:
-            diff = self.num_frames - video_tensor.shape[0]
+        # 2. Handle Padding (Ensure T=8)
+        T = video_tensor.shape[0]
+        if T < self.num_frames:
+            diff = self.num_frames - T
             last_frame = video_tensor[-1].unsqueeze(0)
-            # Add slight noise to padding to avoid "identical feature" collapse
+            # Add slight noise to padding to avoid "identical feature" collapse in LSTM
             padding = last_frame.repeat(diff, 1, 1, 1)
             padding = padding + (torch.randn_like(padding) * 0.01)
             video_tensor = torch.cat([video_tensor, padding], dim=0)
@@ -50,14 +54,14 @@ class PreprocessedVideoDataset(Dataset):
         # Truncate if too long
         video_tensor = video_tensor[:self.num_frames]
 
-        # 3. Per-Channel Standardization (Robust)
-        # Calculate stats across (Time, Height, Width) for each Channel
-        mean = video_tensor.mean(dim=[0, 2, 3], keepdim=True)
-        std = video_tensor.std(dim=[0, 2, 3], keepdim=True)
+        # 3. SCALING (The correct way)
+        # RGB (Channels 0-2) are likely 0-255. We need them 0-1 for the model.
+        # Wavelets (Channels 3-5) are already small floats. We leave them alone.
         
-        #  Clamp std to prevent division by near-zero (common in Wavelet LH/HL/HH)
-        std = torch.clamp(std, min=1e-3)
+        rgb = video_tensor[:, :3, :, :] / 255.0  # Scale RGB to [0, 1]
+        wavelets = video_tensor[:, 3:, :, :]     # Keep wavelets raw
         
-        video_tensor = (video_tensor - mean) / std
+        # Recombine
+        video_tensor = torch.cat([rgb, wavelets], dim=1)
 
         return video_tensor, label

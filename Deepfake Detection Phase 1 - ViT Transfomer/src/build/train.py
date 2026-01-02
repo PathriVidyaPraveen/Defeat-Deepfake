@@ -1,59 +1,121 @@
 import argparse
-from configparser import NoSectionError
-from networkx import bridges
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split, WeightedRandomSampler, Dataset
+from torch.utils.data import DataLoader, WeightedRandomSampler, Dataset
 import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
 import os
+import pickle
+
+# FIX: Correct imports for autocast and GradScaler
+from torch.cuda.amp import autocast, GradScaler
 
 from dataset import PreprocessedVideoDataset
 from model import TemporalViT
 
 # --- Consistent Video Transform ---
 class VideoTransformSubset(Dataset):
-    """
-    Applies transforms to the entire 4D video tensor (T, C, H, W) 
-    to ensure temporal consistency (e.g., if we flip, we flip ALL frames).
-    """
     def __init__(self, subset, augment=False):
         self.subset = subset
         self.augment = augment
+        
+        # ImageNet normalization for ViT
+        self.mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+        self.std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
     def __getitem__(self, index):
         x, y = self.subset[index]
-        # x shape: (T, 3, 224, 224)
+        # x shape: (T, 6, 224, 224) 
+        # Channels 0-2: RGB (already scaled to [0,1] in dataset.py)
+        # Channels 3-5: Wavelet coefficients
         
         if self.augment:
+            # Geometric Augmentation (Apply to BOTH RGB and Wavelet)
             # Random Horizontal Flip
             if torch.rand(1).item() < 0.5:
-                # Flip the width dimension (dim 3)
-                x = torch.flip(x, dims=[3])
+                x = torch.flip(x, dims=[3])  # Flip width
 
-            
-            # Random brightness adjustment
+            # Random rotation (90 degree increments)
+            # FIX: Explicitly cast to int
+            if torch.rand(1).item() < 0.3:
+                k = int(torch.randint(1, 4, (1,)).item())  # Explicitly cast to int
+                x = torch.rot90(x, k, dims=[2, 3])
+
+            # Temporal Augmentation
+            # Random temporal shift/drop
+            # FIX: Explicitly cast to int
+            if torch.rand(1).item() < 0.2:
+                drop_idx = int(torch.randint(0, x.shape[0], (1,)).item())  # Explicitly cast to int
+                replace_idx = max(0, drop_idx - 1)
+                x[drop_idx] = x[replace_idx]
+
+            # Random temporal reverse
+            if torch.rand(1).item() < 0.2:
+                x = torch.flip(x, dims=[0])
+
+            # Photometric Augmentation (RGB only)
+            rgb = x[:, :3, :, :]
+            wav = x[:, 3:, :, :]
+
+            # Random brightness
             if torch.rand(1).item() < 0.5:
-                
-                brightness_factor = 0.8 + torch.rand(1).item() * 0.4  # [0.8, 1.2]
-                x = x * brightness_factor
+                brightness_factor = 0.7 + torch.rand(1).item() * 0.6  # [0.7, 1.3]
+                rgb = rgb * brightness_factor
 
-            # Random gaussian noise
-            if torch.rand(1).item()  < 0.3:
-                noise = torch.randn_like(x) * 0.02
-                x = x + noise
+            # Random contrast
+            if torch.rand(1).item() < 0.3:
+                contrast_factor = 0.8 + torch.rand(1).item() * 0.4  # [0.8, 1.2]
+                mean_val = rgb.mean(dim=[2, 3], keepdim=True)
+                rgb = (rgb - mean_val) * contrast_factor + mean_val
 
-            # Clamp values
-            x = torch.clamp(x, 0.0, 1.0)
-                
+            # Random color jitter
+            if torch.rand(1).item() < 0.3:
+                jitter = torch.randn(1, 3, 1, 1) * 0.1
+                rgb = rgb + jitter
+
+            # Random Gaussian noise
+            if torch.rand(1).item() < 0.3:
+                noise = torch.randn_like(rgb) * 0.03
+                rgb = rgb + noise
+
+            # Random cutout/erasing
+            if torch.rand(1).item() < 0.2:
+                h, w = rgb.shape[2], rgb.shape[3]
+                cut_h, cut_w = h // 4, w // 4
+                top = int(torch.randint(0, h - cut_h, (1,)).item())  # Explicitly cast to int
+                left = int(torch.randint(0, w - cut_w, (1,)).item())  # Explicitly cast to int
+                rgb[:, :, top:top+cut_h, left:left+cut_w] = 0
+
+            # Clamp RGB to [0, 1]
+            rgb = torch.clamp(rgb, 0.0, 1.0)
+            
+            # Recombine before normalization
+            x = torch.cat((rgb, wav), dim=1)
+
+        # ALWAYS apply normalization
+        rgb = x[:, :3, :, :]
+        wav = x[:, 3:, :, :]
+
+        # Normalize RGB with ImageNet stats
+        rgb = (rgb - self.mean) / self.std
+
+        # Normalize wavelets to zero mean, unit variance (per-sample)
+        wav_mean = wav.mean()
+        wav_std = wav.std() + 1e-6
+        wav = (wav - wav_mean) / wav_std
+
+        # Recombine
+        x = torch.cat((rgb, wav), dim=1)
+
         return x, y
 
     def __len__(self):
         return len(self.subset)
+    
 
-def train_one_epoch(model, loader, criterion, optimizer, device):
+def train_one_epoch(model, loader, criterion, optimizer, device, scaler):
     model.train()
     running_loss = 0.0
     all_preds = []
@@ -64,14 +126,21 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
         frames, labels = frames.to(device), labels.to(device)
         
         optimizer.zero_grad()
-        outputs = model(frames)
-        loss = criterion(outputs, labels)
-        
-        loss.backward()
+
+        # FIX: Use imported autocast
+        with autocast():
+            outputs = model(frames)
+            loss = criterion(outputs, labels)
+
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
+
         # Clip gradients
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
         
+        scaler.step(optimizer)
+        scaler.update()
+
         running_loss += loss.item()
         _, predicted = outputs.max(1)
         
@@ -128,14 +197,18 @@ def main():
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    # FIX: Use imported GradScaler
+    scaler = GradScaler()
+
+    # Create directories if they don't exist
+    os.makedirs('./logs', exist_ok=True)
+    os.makedirs('./models', exist_ok=True)
 
     with open('./logs/training_log.txt', 'w') as f:
-        f.write(f"Using device: {device}")
-        f.write(f"Training started at {torch.cuda.Event().record}\n")
+        f.write(f"Using device: {device}\n")
+        f.write(f"Training started\n")
         f.write("=" * 60 + "\n\n")
 
-    
-    
     # Load train and val datasets
     train_path = os.path.join(args.data_path, 'train')
     val_path = os.path.join(args.data_path, 'val')
@@ -144,8 +217,6 @@ def main():
     val_dataset = PreprocessedVideoDataset(val_path)
 
     # Compute balanced sampler BEFORE wrapping with transforms
-    
-    
     # Get all training labels
     train_labels = []
     for i in range(len(train_dataset)):
@@ -182,24 +253,33 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, 
                             shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
-    # 5. Model & Differential Learning Rate
+    # Model & Differential Learning Rate
     model = TemporalViT(num_frames=8).to(device)
-    criterion = nn.CrossEntropyLoss()
+
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     
-    # Low LR for Backbone, High LR for Head
+    # Optimizer
     optimizer = optim.AdamW([
-        {'params': model.vit.parameters(), 'lr': 1e-5, 'weight_decay': 1e-4},  # Backbone: Very slow learning
-        {'params': model.temporal_encoder.parameters(), 'lr': 1e-5, 'weight_decay': 0.01},      # Backbone: Very slow learning
-        {'params': model.classifier.parameters(), 'lr': 1e-3, 'weight_decay' : 0.01} # Head: Standard learning
+        # Fine-tune last ViT blocks
+        {'params': model.vit.encoder.layers[10].parameters(), 'lr': 5e-6, 'weight_decay': 0.05},
+        {'params': model.vit.encoder.layers[11].parameters(), 'lr': 5e-6, 'weight_decay': 0.05},
+        {'params': model.vit.encoder.ln.parameters(), 'lr': 5e-6, 'weight_decay': 0.05},
+        # Train the Sidecar CNN
+        {'params': model.wavelet_cnn.parameters(), 'lr': 2e-4, 'weight_decay': 0.08}, 
+        # Train the LSTM
+        {'params': model.temporal_encoder.parameters(), 'lr': 8e-5, 'weight_decay': 0.08}, 
+        # Train the Classifier Head
+        {'params': model.classifier.parameters(), 'lr': 8e-5, 'weight_decay': 0.08}  
     ])
     
-
-    # Cosine annealing
-    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=5, T_mult=2, eta_min=1e-7
+    # Scheduler
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='max', factor=0.5, patience=2, verbose='True'
     )
+    
     best_acc = 0.0
     print(f"Starting training for {args.epochs} epochs...")
+
     
     # Training metrics
     train_losses = []
@@ -217,20 +297,18 @@ def main():
     val_f1_scores = []
     val_cms = []
 
-
     for epoch in range(args.epochs):
-        train_loss, train_acc, train_prec, train_rec, train_f1, train_cm = train_one_epoch(model, train_loader, criterion, optimizer, device)
-        val_loss, val_acc, val_prec, val_rec, val_f1, val_cm = validate(model, val_loader, criterion, device)
-        
-        # print(f"Epoch {epoch+1}/{args.epochs}")
-        # print(f"  Train | Loss: {train_loss:.4f} | Acc: {train_acc:.2f}%")
-        # print(f"  Val   | Loss: {val_loss:.4f} | Acc: {val_acc:.2f}% | F1: {val_f1:.4f}")
+        train_loss, train_acc, train_prec, train_rec, train_f1, train_cm = train_one_epoch(
+            model, train_loader, criterion, optimizer, device, scaler
+        )
+        val_loss, val_acc, val_prec, val_rec, val_f1, val_cm = validate(
+            model, val_loader, criterion, device
+        )
 
         with open('logs/training_log.txt', 'a') as f:
             f.write(f"Epoch {epoch+1}/{args.epochs}\n")
             f.write(f"  Train | Loss: {train_loss:.4f} | Acc: {train_acc:.2f}% | Prec: {train_prec:.4f} | Rec: {train_rec:.4f} | F1: {train_f1:.4f}\n")
             f.write(f"  Val   | Loss: {val_loss:.4f} | Acc: {val_acc:.2f}% | Prec: {val_prec:.4f} | Rec: {val_rec:.4f} | F1: {val_f1:.4f}\n")
-
 
         # Store training metrics
         train_losses.append(train_loss)
@@ -248,38 +326,40 @@ def main():
         val_f1_scores.append(val_f1)
         val_cms.append(val_cm)
         
+        scheduler.step(val_acc)
+
         if val_acc > best_acc:
             best_acc = val_acc
             torch.save(model.state_dict(), 'models/best_model.pth')
-            print("Saved Best Model!")
+            print(f"Saved Best Model! Val Acc: {val_acc:.2f}%")
         
-        scheduler.step(val_acc)
+       
 
     print(f"Completed training for {args.epochs} epochs\n")
+    
     # Save all metrics for plotting
-    import pickle 
     metrics = {
-            'train_losses': train_losses,
-            'val_losses': val_losses,
-            'train_accuracies': train_accuracies,
-            'val_accuracies': val_accuracies,
-            'train_precisions': train_precisions,
-            'val_precisions': val_precisions,
-            'train_recalls': train_recalls,
-            'val_recalls': val_recalls,
-            'train_f1_scores': train_f1_scores,
-            'val_f1_scores': val_f1_scores,
-            'train_cms': train_cms,
-            'val_cms': val_cms,
-            'best_acc': best_acc
-        }
+        'train_losses': train_losses,
+        'val_losses': val_losses,
+        'train_accuracies': train_accuracies,
+        'val_accuracies': val_accuracies,
+        'train_precisions': train_precisions,
+        'val_precisions': val_precisions,
+        'train_recalls': train_recalls,
+        'val_recalls': val_recalls,
+        'train_f1_scores': train_f1_scores,
+        'val_f1_scores': val_f1_scores,
+        'train_cms': train_cms,
+        'val_cms': val_cms,
+        'best_acc': best_acc
+    }
 
     with open('logs/training_metrics.pkl', 'wb') as f:
         pickle.dump(metrics, f)
 
     print(f"\n{'='*60}")
     print(f"Best Validation Accuracy: {best_acc:.2f}%")
-    print(f"\n{'='*60}")
+    print(f"{'='*60}")
 
 if __name__ == "__main__":
     main()

@@ -5,11 +5,40 @@ import cv2
 import pywt
 from tqdm import tqdm
 import argparse
+import torch.nn.functional as F
 
 def frame_dwt(frame, wavelet='haar'):
     coeffs2 = pywt.dwt2(frame, wavelet)
     cA, (cH, cV, cD) = coeffs2
-    return cH, cV, cD
+    
+    dwt_stack = np.stack([cA, cH, cV], axis=0).astype(np.float32)
+    return dwt_stack
+
+def center_crop(img, target_size=(224, 224)):
+    """
+    Crops the center of the image/frame.
+    img: Numpy array (H, W, C) or (H, W)
+    """
+    h, w = img.shape[:2]
+    th, tw = target_size
+    
+    # If image is smaller than target, pad it instead of crashing
+    if h < th or w < tw:
+        # Calculate padding
+        pad_h = max(0, th - h)
+        pad_w = max(0, tw - w)
+        # Pad evenly on sides
+        img = np.pad(img, ((pad_h//2, pad_h - pad_h//2), (pad_w//2, pad_w - pad_w//2), (0,0)) if len(img.shape)==3 
+                     else ((pad_h//2, pad_h - pad_h//2), (pad_w//2, pad_w - pad_w//2)), mode='constant')
+        h, w = img.shape[:2] # Update new dims
+
+    i = int(round((h - th) / 2.))
+    j = int(round((w - tw) / 2.))
+    
+    if len(img.shape) == 3:
+        return img[i:i+th, j:j+tw, :]
+    else:
+        return img[i:i+th, j:j+tw]
 
 def process_video(video_path, num_frames=8, wavelet='haar'):
     """Reads video, extracts DWT, resizes, and returns a tensor."""
@@ -27,7 +56,6 @@ def process_video(video_path, num_frames=8, wavelet='haar'):
         indices = np.arange(total_frames_in_video)
         
     current_frame = 0
-    idx_pointer = 0
     target_indices = set(indices)
 
     while cap.isOpened():
@@ -36,22 +64,30 @@ def process_video(video_path, num_frames=8, wavelet='haar'):
             break
         
         if current_frame in target_indices:
-            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            cH, cV, cD = frame_dwt(gray_frame, wavelet)
+            # Center crop
+            frame_cropped = center_crop(frame, target_size = (224, 224))
+
+            # Convert to RGB
+            rgb_frame = cv2.cvtColor(frame_cropped, cv2.COLOR_BGR2RGB)
             
-            # Stack components (3 channels)
-            combined = np.stack([cH, cV, cD], axis=0).astype(np.float32)
-            tensor_frame = torch.from_numpy(combined)
-            
-            # Resize for the vit transformer
-            tensor_frame = torch.nn.functional.interpolate(
-                tensor_frame.unsqueeze(0), 
-                size=(224, 224), 
-                mode='bilinear', 
-                align_corners=False
+            # Convert to tensor
+            rgb_tensor = torch.from_numpy(rgb_frame).permute(2, 0, 1).float()
+
+            # Process DWT
+            gray_frame = cv2.cvtColor(frame_cropped, cv2.COLOR_BGR2GRAY)
+            dwt_numpy = frame_dwt(gray_frame, wavelet)
+            dwt_tensor = torch.from_numpy(dwt_numpy)
+
+            # Upsample DWT to match RGB
+            dwt_resized = F.interpolate(
+                dwt_tensor.unsqueeze(0),
+                size=(224, 224),
+                mode='nearest'
             ).squeeze(0)
-            
-            frames_list.append(tensor_frame)
+
+            # Combine 
+            combined_frame = torch.cat([rgb_tensor, dwt_resized], dim=0)
+            frames_list.append(combined_frame)
             
         current_frame += 1
         if len(frames_list) >= len(indices):
@@ -77,7 +113,7 @@ def main():
     parser.add_argument('--output_path', type=str, required=True, help='Path to save .pt files')
     args = parser.parse_args()
 
-    categories = ['0_Celeb-real', '1_Celeb-synthesis']
+    categories = ['real_sequences', 'fake_sequences']
     
     for category in categories:
         input_dir = os.path.join(args.data_path, category)
