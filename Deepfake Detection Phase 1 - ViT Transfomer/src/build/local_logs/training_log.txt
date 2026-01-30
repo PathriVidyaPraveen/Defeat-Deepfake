@@ -1,0 +1,28 @@
+Using device: cuda
+Training started
+============================================================
+
+Epoch 1/8
+  Train | Loss: 0.6811 | Acc: 57.65% | Prec: 0.5758 | Rec: 0.5765 | F1: 0.5756
+  Val   | Loss: 0.6019 | Acc: 68.36% | Prec: 0.7017 | Rec: 0.6836 | F1: 0.6683
+Epoch 2/8
+  Train | Loss: 0.6103 | Acc: 69.30% | Prec: 0.6926 | Rec: 0.6930 | F1: 0.6921
+  Val   | Loss: 0.5836 | Acc: 73.45% | Prec: 0.7371 | Rec: 0.7345 | F1: 0.7314
+Epoch 3/8
+  Train | Loss: 0.5772 | Acc: 72.55% | Prec: 0.7254 | Rec: 0.7255 | F1: 0.7254
+  Val   | Loss: 0.5375 | Acc: 74.91% | Prec: 0.7489 | Rec: 0.7491 | F1: 0.7482
+Epoch 4/8
+  Train | Loss: 0.5406 | Acc: 77.37% | Prec: 0.7738 | Rec: 0.7737 | F1: 0.7735
+  Val   | Loss: 0.4931 | Acc: 79.64% | Prec: 0.7991 | Rec: 0.7964 | F1: 0.7967
+Epoch 5/8
+  Train | Loss: 0.5267 | Acc: 77.29% | Prec: 0.7729 | Rec: 0.7729 | F1: 0.7729
+  Val   | Loss: 0.4697 | Acc: 81.82% | Prec: 0.8209 | Rec: 0.8182 | F1: 0.8184
+Epoch 6/8
+  Train | Loss: 0.4926 | Acc: 80.95% | Prec: 0.8096 | Rec: 0.8095 | F1: 0.8095
+  Val   | Loss: 0.4384 | Acc: 85.82% | Prec: 0.8604 | Rec: 0.8582 | F1: 0.8573
+Epoch 7/8
+  Train | Loss: 0.4724 | Acc: 82.53% | Prec: 0.8254 | Rec: 0.8253 | F1: 0.8253
+  Val   | Loss: 0.4753 | Acc: 80.00% | Prec: 0.8031 | Rec: 0.8000 | F1: 0.8003
+Epoch 8/8
+  Train | Loss: 0.4685 | Acc: 82.70% | Prec: 0.8273 | Rec: 0.8270 | F1: 0.8267
+  Val   | Loss: 0.4676 | Acc: 82.18% | Prec: 0.8351 | Rec: 0.8218 | F1: 0.8216

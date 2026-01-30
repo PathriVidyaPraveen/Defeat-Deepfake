@@ -28,13 +28,10 @@ class PreprocessedVideoDataset(Dataset):
         
         try:
             # Load tensor (Shape: T, 6, 224, 224)
-            # Channels 0-2: RGB (0-255 range usually, coming from cv2)
-            # Channels 3-5: Wavelets (Float, centered around 0)
             video_tensor = torch.load(path).float()
             
         except Exception as e:
             print(f"Error loading {path}: {e}")
-            # FIX: Must return 6 channels to match valid data!
             return torch.zeros(self.num_frames, 6, 224, 224), label
 
         # 1. Sanity Check

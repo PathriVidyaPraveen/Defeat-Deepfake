@@ -1,0 +1,10 @@
+TEST SET RESULTS
+============================================================
+Accuracy:  55.31%
+Precision: 0.3059
+Recall:    0.5531
+F1 Score:  0.3940
+
+Confusion Matrix:
+[[151   0]
+ [122   0]]

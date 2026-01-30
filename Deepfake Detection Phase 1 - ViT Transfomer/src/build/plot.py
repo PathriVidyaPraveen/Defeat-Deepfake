@@ -6,7 +6,7 @@ import seaborn as sns
 
 def main():
     # Load metrics
-    with open('logs/training_metrics_ll.pkl', 'rb') as f:
+    with open('local_logs/training_metrics.pkl', 'rb') as f:
         metrics = pickle.load(f)
 
     # Access individual metrics
@@ -68,7 +68,7 @@ def main():
     ax4.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig('plots/training_metrics_ll.png', dpi=300, bbox_inches='tight')
+    plt.savefig('plots_new/training_metrics.png', dpi=300, bbox_inches='tight')
     plt.show()
 
     # Plot confusion matrices
@@ -88,7 +88,7 @@ def main():
     ax2.set_ylabel('Actual')
 
     plt.tight_layout()
-    plt.savefig('plots/confusion_matrices_ll.png', dpi=300,bbox_inches='tight')
+    plt.savefig('plots/confusion_matrices.png', dpi=300,bbox_inches='tight')
     plt.show()
 
 

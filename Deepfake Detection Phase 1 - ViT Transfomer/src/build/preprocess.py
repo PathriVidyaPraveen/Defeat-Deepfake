@@ -6,6 +6,44 @@ import pywt
 from tqdm import tqdm
 import argparse
 import torch.nn.functional as F
+from ultralytics import YOLO
+from huggingface_hub import hf_hub_download
+from supervision import Detection
+from PIL import Image
+
+
+model_path = hf_hub_download(repo_id="arnabdhar/YOLOv8-Face-Detection",
+                 filename="model.pt")
+
+face_model = YOLO(model_path)
+
+
+def yolo_crop(frame, target_size=(224, 224)):
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    pil_image = Image.fromarray(frame_rgb)
+
+    # YOLO inference
+    output = face_model(pil_image)
+    results = Detections.from_ultralytics(output[0])
+
+    if len(results) > 0:
+        # Extract results
+        xyxy = results.xyxy[0]
+        x1, y1, x2, y2 = map(int, xyxy)
+
+        face_crop = frame[y1:y2, x1:x2]
+
+        face_resized = cv2.resize(face_crop, target_size, interpolation=cv2.INTER_LINEAR)
+        return face_resized
+    else:
+        print(f"YOLO crop failed")
+        return center_crop(frame, target_size)
+        
+
+
+
+
+
 
 def frame_dwt(frame, wavelet='haar'):
     coeffs2 = pywt.dwt2(frame, wavelet)
@@ -65,7 +103,8 @@ def process_video(video_path, num_frames=8, wavelet='haar'):
         
         if current_frame in target_indices:
             # Center crop
-            frame_cropped = center_crop(frame, target_size = (224, 224))
+            # Modify to use a YOLO model for cropping
+            frame_cropped = yolo_crop(frame, target_size = (224, 224))
 
             # Convert to RGB
             rgb_frame = cv2.cvtColor(frame_cropped, cv2.COLOR_BGR2RGB)

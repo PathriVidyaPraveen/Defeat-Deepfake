@@ -53,7 +53,7 @@ class TemporalViT(nn.Module):
         weights = ViT_B_16_Weights.IMAGENET1K_V1
         self.vit = vit_b_16(weights=weights)
 
-        # --- FREEZING STRATEGY ---
+        # Freezing base model
         for param in self.vit.parameters():
             param.requires_grad = False
         
@@ -73,7 +73,7 @@ class TemporalViT(nn.Module):
         
         total_input_dim = self.rgb_embed_dim + self.wavelet_embed_dim # 896
 
-        # --- NEW: TEMPORAL CNN INSTEAD OF LSTM ---
+        
         # Input: (Batch, 896, 8) -> Output: (Batch, 256, 8)
         self.temporal_cnn = nn.Sequential(
             nn.Conv1d(in_channels=total_input_dim, out_channels=256, kernel_size=3, padding=1),
@@ -86,7 +86,7 @@ class TemporalViT(nn.Module):
             nn.ReLU()
         )
         
-        # Global Average Pooling over time (Squash 8 frames into 1 vector)
+        # Global Average Pooling over time
         self.global_pool = nn.AdaptiveAvgPool1d(1)
 
         self.classifier = nn.Sequential(
@@ -119,7 +119,7 @@ class TemporalViT(nn.Module):
         temporal_input = fused_features.view(b, t, -1)
         
         # 6. Permute for CNN
-        # Conv1d expects (Batch, Channels, Time) -> We have (Batch, Time, Features)
+        # Conv1d expects (Batch, Channels, Time) 
         # So we swap dimensions 1 and 2
         temporal_input = temporal_input.permute(0, 2, 1) # (B, 896, T)
         
