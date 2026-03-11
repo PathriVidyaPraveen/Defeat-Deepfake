@@ -37,16 +37,14 @@ class VideoTransformSubset(Dataset):
                 x = torch.flip(x, dims=[3])  # Flip width
 
             # Random rotation (90 degree increments)
-            # FIX: Explicitly cast to int
             if torch.rand(1).item() < 0.3:
-                k = int(torch.randint(1, 4, (1,)).item())  # Explicitly cast to int
+                k = int(torch.randint(1, 4, (1,)).item())  
                 x = torch.rot90(x, k, dims=[2, 3])
 
             # Temporal Augmentation
             # Random temporal shift/drop
-            # FIX: Explicitly cast to int
             if torch.rand(1).item() < 0.2:
-                drop_idx = int(torch.randint(0, x.shape[0], (1,)).item())  # Explicitly cast to int
+                drop_idx = int(torch.randint(0, x.shape[0], (1,)).item())
                 replace_idx = max(0, drop_idx - 1)
                 x[drop_idx] = x[replace_idx]
 
@@ -83,8 +81,8 @@ class VideoTransformSubset(Dataset):
             if torch.rand(1).item() < 0.2:
                 h, w = rgb.shape[2], rgb.shape[3]
                 cut_h, cut_w = h // 4, w // 4
-                top = int(torch.randint(0, h - cut_h, (1,)).item())  # Explicitly cast to int
-                left = int(torch.randint(0, w - cut_w, (1,)).item())  # Explicitly cast to int
+                top = int(torch.randint(0, h - cut_h, (1,)).item())  
+                left = int(torch.randint(0, w - cut_w, (1,)).item()) 
                 rgb[:, :, top:top+cut_h, left:left+cut_w] = 0
 
             # Clamp RGB to [0, 1]
@@ -93,14 +91,14 @@ class VideoTransformSubset(Dataset):
             # Recombine before normalization
             x = torch.cat((rgb, wav), dim=1)
 
-        # ALWAYS apply normalization
+        
         rgb = x[:, :3, :, :]
         wav = x[:, 3:, :, :]
 
         # Normalize RGB with ImageNet stats
         rgb = (rgb - self.mean) / self.std
 
-        # Normalize wavelets to zero mean, unit variance (per-sample)
+        # Normalize wavelets to zero mean, unit variance 
         wav_mean = wav.mean()
         wav_std = wav.std() + 1e-6
         wav = (wav - wav_mean) / wav_std
@@ -126,7 +124,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device, scaler):
         
         optimizer.zero_grad()
 
-        # FIX: Use imported autocast
+       
         with autocast():
             outputs = model(frames)
             loss = criterion(outputs, labels)
@@ -196,7 +194,7 @@ def main():
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # FIX: Use imported GradScaler
+    
     scaler = GradScaler()
 
     # Create directories if they don't exist
@@ -215,7 +213,7 @@ def main():
     train_dataset = PreprocessedVideoDataset(train_path)
     val_dataset = PreprocessedVideoDataset(val_path)
 
-    # Compute balanced sampler BEFORE wrapping with transforms
+    # Compute balanced sampler before wrapping with transforms
     # Get all training labels
     train_labels = []
     for i in range(len(train_dataset)):
@@ -226,7 +224,7 @@ def main():
     class_counts = np.bincount(train_labels.astype(int))
     print(f"Train counts: Real={class_counts[0]}, Fake={class_counts[1]}")
     
-    # Compute sample weights (inversely proportional to class frequency)
+    # Compute sample weights 
     class_weights = 1.0 / class_counts
     sample_weights = [class_weights[int(label)] for label in train_labels]
     
@@ -240,7 +238,7 @@ def main():
         replacement=True
     )
     
-    # Apply transforms AFTER computing sampler
+    # Apply transforms after computing sampler
     train_dataset = VideoTransformSubset(train_dataset, augment=True)
     val_dataset = VideoTransformSubset(val_dataset, augment=False)
 
