@@ -185,8 +185,8 @@ This project is open source and available under the MIT License. See the LICENSE
 
 ## 👨‍💼 Author
 
-**Pathri Vidya Praveen**
-- GitHub: [@PathriVidyaPraveen](https://github.com/PathriVidyaPraveen)
+**Pathri Vidya Praveen, Jakkula Adishesh Balaji**
+- GitHub: [@PathriVidyaPraveen](https://github.com/PathriVidyaPraveen) [@AdisheshBalaji](https://github.com/AdisheshBalaji)
 - Repository: [Defeat-Deepfake](https://github.com/PathriVidyaPraveen/Defeat-Deepfake)
 
 ---
